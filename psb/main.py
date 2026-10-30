@@ -1,7 +1,7 @@
 """Start the bot: asks for your token the first time, then stays online while this window is open.
 
   ProxyScrapeBot.exe            (or: python run.py)
-  ProxyScrapeBot.exe --reset    ask for the token and timezone again
+  ProxyScrapeBot.exe --reset    ask for the token again
   ProxyScrapeBot.exe --invite   open the "add to server" page again (it opens by itself while the bot is in no server)
 """
 import sys
@@ -25,7 +25,7 @@ def main() -> int:
     data = config.setup(config.load(), reset_token="--reset" in sys.argv)
     while True:
         try:
-            bot.run(data["token"], config.timezone(data["timezone"]), invite="--invite" in sys.argv)
+            bot.run(data["token"], config.local_timezone(), invite="--invite" in sys.argv)
             return 0
         except discord.LoginFailure:
             print("\nDiscord rejected that token. Copy a fresh one: Developer Portal > your app > Bot > Reset Token.")

@@ -22,8 +22,8 @@ nothing is sent anywhere except back to your Discord channel, and nothing is sav
 ## 2. Run it
 **Windows:** download `ProxyScrapeBot.exe` from [Releases](../../releases) and double-click it.
 - Windows may say "Windows protected your PC" (the app isn't code-signed): **More info** > **Run anyway**.
-- The first start asks for your **bot token** (paste it, it won't show while pasting) and your **timezone**
-  (e.g. `America/New_York`). They're saved on your computer only, in `%APPDATA%\ProxyScrapeBot\config.json`.
+- The first start asks for your **bot token** (paste it, it won't show while pasting). It's saved on your computer
+  only, in `%APPDATA%\ProxyScrapeBot\config.json`. Times on the chart use your computer's own timezone.
 - Once it says **"is online"**, it **opens the "add to server" page in your browser by itself** (and copies the
   link: Ctrl+V to paste it somewhere). Pick your server > **Continue** > **Authorize**. You need Manage Server in
   that server. Add it to another server later: `ProxyScrapeBot.exe --invite`.
@@ -40,7 +40,7 @@ python -m pip install -r requirements.txt
 python run.py
 ```
 
-To change the token or timezone later: `ProxyScrapeBot.exe --reset` (or `python run.py --reset`), or edit / delete
+To change the token later: `ProxyScrapeBot.exe --reset` (or `python run.py --reset`), or edit / delete
 the `config.json` above.
 
 ## 3. Use it

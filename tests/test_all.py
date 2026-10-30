@@ -5,6 +5,7 @@ Only made-up webhooks here: never real proxies, emails or order numbers.
 import asyncio
 import sys
 import unittest
+import unittest.mock
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +31,19 @@ def shikari(title="Successful Checkout", proxy="a.vaultedproxies.com:1:user:pass
     return {"id": "1", "day": "", "created_at": when, "channel_id": "1", "source_name": "Shikari", "content": "",
             "embeds": [{"title": title, "author": {"name": "Shikari"}, "description": SHIKARI_DESC, "fields": fields}],
             "jump_url": "https://discord.com/channels/1/1/1"}
+
+
+class Settings(unittest.TestCase):
+    def test_only_the_token_is_saved_and_times_are_local(self):
+        import json
+        import os
+        import tempfile
+        from psb import config
+        with tempfile.TemporaryDirectory() as d, unittest.mock.patch.dict(os.environ, {"APPDATA": d}):
+            config.save({"token": "abc", "timezone": "Asia/Kolkata"})
+            self.assertEqual(json.loads(config.path().read_text(encoding="utf-8")), {"token": "abc"})
+        tz = config.local_timezone()
+        self.assertIsNotNone(datetime.now(tz).utcoffset())
 
 
 class Points(unittest.TestCase):

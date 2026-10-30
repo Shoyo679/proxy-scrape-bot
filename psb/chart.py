@@ -271,7 +271,7 @@ def render(r: Report, channel: str, counted: str) -> bytes:
             used = ", ".join(f"{short.get(p, p)} ×{k}" for p, k in col.proxies.most_common())
             c.text(x + 16, y + 84, c.fit(used, bw2 - 32, 13), 13, INK_2)
         y += 116
-    c.text(W / 2, height - 30, "Times shown in the server owner's timezone setting · only proxy provider and type are "
-                               "shown, never proxy logins", 12, MUTED, anchor="mm")
+    c.text(W / 2, height - 30, "Times in the local time of the computer running the bot · only proxy provider and "
+                               "type are shown, never proxy logins", 12, MUTED, anchor="mm")
     return c.png()
 

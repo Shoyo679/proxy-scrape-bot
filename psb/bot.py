@@ -11,6 +11,7 @@ import logging
 import subprocess
 import sys
 import webbrowser
+from datetime import datetime
 
 import discord
 from discord import app_commands
@@ -61,6 +62,7 @@ class ProxyBot(discord.Client):
 
     async def on_ready(self):
         print(f"Proxy Scrape Bot v{__version__} is online as {self.user} in {len(self.guilds)} server(s).")
+        print(f"Times use this computer's timezone: {getattr(self.tz, 'key', None) or datetime.now(self.tz).strftime('%Z')}")
         for guild in self.guilds:
             await self.sync_guild(guild)
         link = invite_link(self.user.id)
@@ -196,8 +198,8 @@ class ProxyCommands(app_commands.Group):
             "`today`, `yesterday`\n"
             "• `end` (optional): the last message, or the last day. Empty = up to now\n"
             "• `include`: success + all fails (default) or success only\n"
-            "Only proxy **provider and type** are shown, never proxy logins. Times are in "
-            f"{self.bot.tz.key}.", ephemeral=True)
+            "Only proxy **provider and type** are shown, never proxy logins. Times are in the local time of the "
+            "computer running the bot.", ephemeral=True)
 
 
 def _key(point) -> int:

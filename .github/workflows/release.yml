@@ -15,7 +15,7 @@ jobs:
           python-version: "3.13"
       - run: pip install -r requirements.txt pyinstaller
       - run: python -m unittest discover -s tests
-      - run: pyinstaller --onefile --console --name ProxyScrapeBot --icon assets/icon.ico --collect-data tzdata run.py
+      - run: pyinstaller --onefile --console --name ProxyScrapeBot --icon assets/icon.ico --collect-data tzdata --hidden-import tzlocal run.py
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/ProxyScrapeBot.exe
