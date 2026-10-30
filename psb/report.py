@@ -146,7 +146,8 @@ def build(attempts: list[Attempt]) -> Report:
         p.ok += a.ok
     order = sorted(providers.values(), key=lambda p: (p.name in (ISP, NO_PROXY), -p.total, -p.ok, p.name))
     # active time and window count always come from the real windows, even when the chart uses plain columns
-    active = sum((g[-1] - g[0] + timedelta(minutes=1) for g in groups), timedelta())
+    # whole minutes, both ends counted: 3:05 to 3:18 = 14m
+    active = sum((_floor(g[-1], 1) - _floor(g[0], 1) + timedelta(minutes=1) for g in groups), timedelta())
     return Report(attempts=attempts, total=len(attempts), ok=sum(a.ok for a in attempts),
                   fails=Counter(a.status for a in attempts if not a.ok), providers=order, columns=columns, size=size,
                   windows=len(groups), first=times[0] if times else None, last=times[-1] if times else None,

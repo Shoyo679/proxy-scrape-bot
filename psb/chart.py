@@ -1,10 +1,11 @@
-"""The "Proxy Timeline" image posted with every scrape (PNG, 1600 px wide, drawn with Pillow).
+"""The "Proxy Timeline" image posted with every scrape (PNG, 2000 px wide, drawn with Pillow).
 
-  header      title, channel, day and time range, what was counted; big success rate on the right
-  tiles       attempts, providers, peak column, active time, proxy coverage
-  chart       attempts per column (green = success, red = failed); one row per proxy with a dot in every column it
-              was used in (green = all success, red = all failed, amber = both) and its total + success rate
-  busiest     the busiest columns with the proxies used in them
+  header    logo, title, channel · day · time range · what was counted; big success rate + split bar on the right
+  stats     one strip: checkouts, providers, peak minute, active time, proxy coverage
+  timeline  checkouts per column (green = ok, red = failed) in fixed-width columns, the peak column highlighted;
+            one row per proxy provider with a pie dot in every column it was used in (size = how many, slices = ok /
+            failed) and its total, success rate and split bar on the right
+  busiest   up to 6 busiest columns with the providers used in them
 Drawn at twice the size and scaled down, so lines and text are smooth.
 """
 import io
@@ -15,13 +16,16 @@ from PIL import Image, ImageDraw, ImageFont
 from .proxies import ISP, NO_PROXY
 from .report import Report, duration, size_name
 
-W = 1600
+W = 2000
 S = 2   # drawn at 2x
-PAD = 36
-BG, PANEL, PANEL_2, LINE = "#0e0f13", "#16171c", "#1d1e25", "#2a2b33"
-INK, INK_2, MUTED = "#eceef3", "#b9bcc8", "#7d8090"
-GREEN, RED, AMBER, ACCENT = "#3ddc84", "#f0505c", "#f5b13d", "#7c6cff"
-MAX_ROWS = 7
+PAD = 57
+BG, PANEL, PANEL_2, LINE = "#18181b", "#232327", "#2c2c31", "#36363c"
+INK, INK_2, MUTED = "#f2f2f4", "#c4c4cc", "#8a8a94"
+GREEN, RED, AMBER, ACCENT = "#36d77d", "#ef4a4f", "#f5a524", "#7c5cff"
+TOP_ROW = "#1f2a24"
+MAX_ROWS = 5          # named providers with their own row; the rest go in "Others"
+COL_W = 57            # widest a column gets
+ROW_H = 74
 
 _FONT_FILES = {
     "regular": ["segoeui.ttf", "DejaVuSans.ttf", "Arial.ttf", "Helvetica.ttc"],
@@ -56,9 +60,9 @@ class Canvas:
         self.img = Image.new("RGB", (W * S, height * S), BG)
         self.d = ImageDraw.Draw(self.img)
 
-    def box(self, x, y, w, h, fill, r=12, outline=None):
+    def box(self, x, y, w, h, fill, r=16, outline=None):
         self.d.rounded_rectangle((x * S, y * S, (x + w) * S, (y + h) * S), r * S, fill=fill,
-                                 outline=outline, width=S if outline else 0)
+                                 outline=outline, width=2 * S if outline else 0)
 
     def rect(self, x, y, w, h, fill):
         if w > 0 and h > 0:
@@ -70,11 +74,40 @@ class Canvas:
     def dot(self, x, y, r, fill):
         self.d.ellipse(((x - r) * S, (y - r) * S, (x + r) * S, (y + r) * S), fill=fill)
 
-    def text(self, x, y, s, size=16, fill=INK, weight="regular", anchor="la"):
-        self.d.text((x * S, y * S), str(s), font=font(size, weight), fill=fill, anchor=anchor)
+    def pie(self, x, y, r, ok, failed):
+        """A dot split into ok (green) and failed (red) slices."""
+        if not failed or not ok:
+            return self.dot(x, y, r, GREEN if ok else RED)
+        box = ((x - r) * S, (y - r) * S, (x + r) * S, (y + r) * S)
+        split = -90 + 360 * ok / (ok + failed)
+        self.d.pieslice(box, -90, split, fill=GREEN)
+        self.d.pieslice(box, split, 270, fill=RED)
 
-    def width(self, s, size=16, weight="regular") -> float:
-        return self.d.textlength(str(s), font=font(size, weight)) / S
+    def split_bar(self, x, y, w, h, ok, failed):
+        """A rounded bar: green for the ok share, red for the rest."""
+        total = ok + failed
+        self.box(x, y, w, h, PANEL_2, h / 2)
+        if not total:
+            return
+        self.box(x, y, w, h, RED if failed else GREEN, h / 2)
+        if ok and failed:
+            self.box(x, y, w * ok / total, h, GREEN, h / 2)
+            self.rect(x + w * ok / total - h / 2, y, h / 2, h, GREEN)   # square edge where green meets red
+
+    def text(self, x, y, s, size=16, fill=INK, weight="regular", anchor="la", tracking=0):
+        s = str(s)
+        if not tracking:
+            self.d.text((x * S, y * S), s, font=font(size, weight), fill=fill, anchor=anchor)
+            return
+        total = self.width(s, size, weight, tracking)   # letter-spaced labels: drawn letter by letter
+        x0 = x - total if anchor[0] == "r" else x - total / 2 if anchor[0] == "m" else x
+        for ch in s:
+            self.d.text((x0 * S, y * S), ch, font=font(size, weight), fill=fill, anchor="l" + anchor[1])
+            x0 += self.width(ch, size, weight) + tracking
+
+    def width(self, s, size=16, weight="regular", tracking=0) -> float:
+        s = str(s)
+        return self.d.textlength(s, font=font(size, weight)) / S + tracking * max(len(s) - 1, 0)
 
     def fit(self, s, max_w, size=16, weight="regular") -> str:
         s = str(s)
@@ -98,180 +131,230 @@ def _clock(t) -> str:
     return t.strftime("%I:%M %p").lstrip("0")
 
 
-def _span(r: Report) -> str:
-    if r.first is None:
-        return ""
-    tz = r.first.strftime("%Z")
-    if r.first.date() == r.last.date():
-        return f"{r.first:%b %d, %Y} · {_clock(r.first)} – {_clock(r.last)} {tz}"
-    return f"{r.first:%b %d} {_clock(r.first)} – {r.last:%b %d, %Y} {_clock(r.last)} {tz}"
+def _tz(r: Report) -> str:
+    return r.first.strftime("%Z") if r.first else ""
 
 
-def _column_label(c, size: int) -> str:
+def _label(t, size: int) -> str:
     if size >= 1440:
-        return c.start.strftime("%b %d")
+        return t.strftime("%b %d")
     if size >= 60:
-        return c.start.strftime("%b %d %I %p").replace(" 0", " ")
-    return _clock(c.start)
+        return t.strftime("%b %d, %I %p").replace(" 0", " ")
+    return _clock(t)
+
+
+def _logo(c: Canvas, x, y, r):
+    """Our own mark: a target with a pointer (same as the app icon)."""
+    c.dot(x, y, r, ACCENT)
+    c.dot(x, y, r * 0.68, PANEL)
+    c.dot(x, y, r * 0.42, ACCENT)
+    c.dot(x, y, r * 0.18, PANEL)
+    c.line(x, y, x + r * 0.62, y - r * 0.62, INK, 4)
+    c.dot(x, y, r * 0.1, GREEN)
+
+
+def _marks(r: Report, cw: float) -> set[int]:
+    """Columns that get a time label: each window's first column and round times about every 150 px."""
+    out = {i for i, col in enumerate(r.columns) if i == 0 or col.window != r.columns[i - 1].window}
+    if r.size >= 60 or not r.columns:
+        every = max(1, round(150 / cw))
+        return out | set(range(0, len(r.columns), every))
+    for step in (5, 10, 15, 30, 60, 120, 240):   # minutes between labels
+        if step >= r.size and step / r.size * cw >= 150:
+            break
+    for i, col in enumerate(r.columns):
+        if (col.start.hour * 60 + col.start.minute) % step == 0:
+            out.add(i)
+    return out
 
 
 def render(r: Report, channel: str, counted: str) -> bytes:
-    # named providers (top MAX_ROWS, the rest as "Others"), then ISP and "No proxy data" always on their own rows
     named = [p for p in r.providers if p.name not in (ISP, NO_PROXY)]
     plain = [p for p in r.providers if p.name in (ISP, NO_PROXY)]
     rows, others = named[:MAX_ROWS], named[MAX_ROWS:]
-    n_rows = len(rows) + (1 if others else 0) + len(plain)
-    busiest = r.busiest()
-    plot_h, row_h = 210, 46
-    chart_h = 60 + plot_h + 14 + n_rows * row_h + 40
-    height = PAD + 108 + 24 + 104 + 24 + chart_h + (24 + 30 + 116 if busiest else 0) + 56
+    shown = [(p.name, p.ptype, p.total, p.ok, {p.name}) for p in rows]
+    if others:
+        shown.append((f"Others ({len(others)})", "others", sum(p.total for p in others), sum(p.ok for p in others),
+                      {p.name for p in others}))
+    shown += [(p.name, p.ptype, p.total, p.ok, {p.name}) for p in plain]
+    busiest = r.busiest(6)
+    unit = size_name(r.size)
+    plot_h = 200
+    chart_h = 100 + plot_h + 16 + len(shown) * ROW_H + 100
+    height = 211 + 137 + 29 + chart_h + (40 + 50 + 175 if busiest else 0) + 110
     c = Canvas(height)
+    tz = _tz(r)
 
     # --- header ---
-    y = PAD
-    c.dot(PAD + 30, y + 32, 30, PANEL_2)
-    for rr, col in ((22, ACCENT), (14, PANEL_2), (8, ACCENT)):
-        c.dot(PAD + 30, y + 32, rr, col)
-    c.line(PAD + 30, y + 32, PAD + 52, y + 12, INK, 3)
-    c.text(PAD + 76, y + 4, "Proxy Timeline", 34, INK, "bold")
-    sub = " · ".join(s for s in (f"#{channel}", _span(r), counted) if s)
-    c.text(PAD + 78, y + 52, c.fit(sub, W - 2 * PAD - 420), 18, MUTED)
+    _logo(c, PAD + 40, 102, 40)
+    c.text(PAD + 106, 84, "Proxy Timeline", 46, INK, "bold", "ls")
+    if r.first and r.first.date() == r.last.date():
+        when = [f"{r.first:%b %d, %Y}", f"{_clock(r.first)} – {_clock(r.last)} {tz}"]
+    elif r.first:
+        when = [f"{r.first:%b %d} {_clock(r.first)} – {r.last:%b %d, %Y} {_clock(r.last)} {tz}"]
+    else:
+        when = []
+    x = PAD + 106
+    for k, part in enumerate([f"#{channel}"] + when + [counted]):
+        if k:
+            c.text(x + 14, 137, "·", 21, MUTED, "semibold", "lm")
+            x += 36
+        part = c.fit(part, W - 420 - x, 21, "semibold")
+        c.text(x, 137, part, 21, INK_2, "semibold", "lm")
+        x += c.width(part, 21, "semibold")
     rate_col = _rate_colour(r.rate)
-    c.text(W - PAD, y - 6, f"{round(r.rate * 100)}%", 72, rate_col, "bold", "ra")
-    c.rect(W - PAD - 220, y + 86, 220, 6, PANEL_2)
-    c.rect(W - PAD - 220, y + 86, 220 * r.rate, 6, rate_col)
-    c.rect(W - PAD - 220 + 220 * r.rate, y + 86, 220 * (1 - r.rate), 6, RED if r.total else PANEL_2)
-    c.text(W - PAD, y + 98, "SUCCESS RATE", 12, MUTED, "semibold", "ra")
-    y += 108 + 24
+    c.text(W - PAD, 136, f"{round(r.rate * 100)}%", 92, rate_col, "bold", "rs")
+    c.text(W - PAD, 152, "SUCCESS RATE", 17, INK_2, "semibold", "rm", tracking=2.2)
+    c.split_bar(W - PAD - 240, 172, 240, 9, r.ok, r.total - r.ok)
 
-    # --- tiles ---
+    # --- stats strip ---
+    y = 211
+    c.box(PAD, y, W - 2 * PAD, 137, PANEL, 18)
     peak = r.peak()
     tiles = [
-        ("ATTEMPTS", r.total, f"{r.ok} success · {r.total - r.ok} failed"),
-        ("PROVIDERS", r.provider_count, "named resi / mobile providers"),
-        (f"PEAK {size_name(r.size).upper()}", f"{peak.total if peak else 0}",
-         f"{_column_label(peak, r.size)} · {peak.ok} success" if peak and peak.total else "–"),
-        ("ACTIVE", duration(r.active) if r.total else "–",
-         f"{r.windows} burst{'s' if r.windows != 1 else ''}" + (" · quiet gaps cut from chart"
-                                                              if r.columns and r.columns[-1].window else "")),
-        ("PROXY COVERAGE", f"{round(100 * r.with_proxy / r.total) if r.total else 0}%",
+        ("CHECKOUTS", f"{r.total}", "", f"{r.ok} ok · {r.total - r.ok} failed"),
+        ("PROVIDERS", f"{r.provider_count}", "", "named resi / mobile providers"),
+        (f"PEAK {unit.upper()}", f"{peak.total if peak else 0}", "checkouts",
+         f"{_label(peak.start, r.size)} {tz}" if peak and peak.total else "–"),
+        ("ACTIVE", duration(r.active) if r.total else "–", "",
+         f"{r.windows} drop window{'s' if r.windows != 1 else ''}"),
+        ("PROXY COVERAGE", f"{round(100 * r.with_proxy / r.total) if r.total else 0}%", "",
          f"{r.with_proxy} of {r.total} with proxy data"),
     ]
-    tw = (W - 2 * PAD - 4 * 14) / 5
-    for i, (label, value, note) in enumerate(tiles):
-        x = PAD + i * (tw + 14)
-        c.box(x, y, tw, 104, PANEL, 12, LINE)
-        c.text(x + 18, y + 16, label, 12, MUTED, "semibold")
-        c.text(x + 18, y + 34, value, 32, INK, "bold")
-        c.text(x + 18, y + 78, c.fit(note, tw - 30), 13, INK_2)
-    y += 104 + 24
+    tw = (W - 2 * PAD) / 5
+    for i, (label, value, unit_word, note) in enumerate(tiles):
+        x = PAD + i * tw + 34
+        if i:
+            c.line(PAD + i * tw, y + 26, PAD + i * tw, y + 111, LINE)
+        c.text(x, y + 35, label, 16, MUTED, "semibold", "lm", tracking=2)
+        c.text(x, y + 88, value, 38, INK, "bold", "ls")
+        if unit_word:
+            c.text(x + c.width(value, 38, "bold") + 8, y + 88, unit_word, 21, INK_2, "regular", "ls")
+        c.text(x, y + 109, c.fit(note, tw - 50, 19), 19, INK_2, anchor="lm")
 
-    # --- chart ---
-    c.box(PAD, y, W - 2 * PAD, chart_h, PANEL, 14, LINE)
-    c.text(PAD + 20, y + 20, f"ATTEMPTS PER {size_name(r.size).upper()}", 13, MUTED, "semibold")
-    lx = W - PAD - 20
+    # --- timeline ---
+    y = 211 + 137 + 29
+    c.box(PAD, y, W - 2 * PAD, chart_h, PANEL, 18)
+    c.text(PAD + 34, y + 54, f"CHECKOUTS PER {unit.upper()}", 19, INK_2, "semibold", "lm", tracking=2.2)
+    c.text(PAD + 34 + c.width(f"CHECKOUTS PER {unit.upper()}", 19, "semibold", 2.2) + 20, y + 55,
+           f"times in {tz}", 16, MUTED, anchor="lm")
+    lx = W - PAD - 34
     for name, col in ((f"Failed {r.total - r.ok}", RED), (f"Success {r.ok}", GREEN)):
-        c.text(lx, y + 20, name, 13, INK_2, "semibold", "ra")
-        lx -= c.width(name, 13, "semibold") + 8
-        c.dot(lx - 5, y + 28, 5, col)
-        lx -= 26
-    left, right = PAD + 250, W - PAD - 230
+        c.text(lx, y + 54, name, 17, INK, "semibold", "rm")
+        lx -= c.width(name, 17, "semibold") + 14
+        c.dot(lx, y + 54, 7, col)
+        lx -= 34
     cols = r.columns
-    n = max(len(cols), 1)
-    cw = (right - left) / n
-    top = y + 60
-    base = top + plot_h
+    left, right = PAD + 333, W - PAD - 340
+    cw = min(COL_W, (right - left) / max(len(cols), 1))
+    top = y + 134
+    base = top + plot_h - 20
+    rows_top = base + 16
+    rows_end = rows_top + len(shown) * ROW_H
     vmax = max([col.total for col in cols] + [1])
-    for frac in (0, 0.5, 1):
-        gy = base - plot_h * frac
-        c.line(left, gy, right, gy, LINE)
-        c.text(left - 10, gy, round(vmax * frac), 12, MUTED, anchor="rm")
-    bw = max(min(cw * 0.62, 44), 2)
+    c.line(left - 18, top, left + cw * len(cols) + 180, top, LINE)
+    c.line(left - 18, base, left + cw * len(cols), base, LINE)
+    c.text(left - 28, top, vmax, 17, MUTED, anchor="rm")
+    c.text(left - 28, base, 0, 17, MUTED, anchor="rm")
+    peak_i = cols.index(peak) if peak and peak.total else None
+    if peak_i is not None:   # highlight band through the chart and the rows
+        c.rect(left + cw * peak_i, top - 30, cw, rows_end - top + 30, PANEL_2)
+    marks = _marks(r, cw)
+    for i in sorted(marks):
+        if i != peak_i and i:
+            c.line(left + cw * i + cw / 2, top - 30, left + cw * i + cw / 2, rows_end, LINE)
     for i, col in enumerate(cols):
-        cx = left + cw * (i + 0.5)
-        if i and col.window != cols[i - 1].window:   # quiet gap left out
+        if i and col.window != cols[i - 1].window:   # idle gap removed
             gx = left + cw * i
-            for k in range(0, int(plot_h + n_rows * row_h), 8):
-                c.line(gx, top + k, gx, top + k + 4, MUTED)
+            for k in range(int(top - 30), int(rows_end), 10):
+                c.line(gx, k, gx, k + 5, MUTED)
+    bw = max(min(cw * 0.42, 22), 3)
+    for i, col in enumerate(cols):
         if not col.total:
             continue
-        h_ok = plot_h * col.ok / vmax
-        h_fail = plot_h * col.failed / vmax
-        c.rect(cx - bw / 2, base - h_ok, bw, h_ok, GREEN)
-        c.rect(cx - bw / 2, base - h_ok - h_fail, bw, h_fail, RED)
-        if cw >= 16 or col is peak:
-            c.text(cx, base - h_ok - h_fail - 6, col.total, 12, INK_2, "semibold", "md")
+        cx = left + cw * (i + 0.5)
+        h_ok = (base - top) * col.ok / vmax
+        h_fail = (base - top) * col.failed / vmax
+        if col.failed:
+            c.box(cx - bw / 2, base - h_ok - h_fail, bw, h_fail + (4 if col.ok else 0), RED, 3)
+        if col.ok:
+            c.box(cx - bw / 2, base - h_ok, bw, h_ok, GREEN, 3)
+        if col.failed and col.ok:
+            c.rect(cx - bw / 2, base - h_ok - 2, bw, 3, PANEL if i != peak_i else PANEL_2)   # thin gap
+        if col.total >= 2 and (cw >= 30 or i == peak_i):
+            c.text(cx, base - h_ok - h_fail - 8, col.total, 18, INK, "semibold", "ms")
 
-    # proxy rows
-    ry = base + 14
-    shown = [(p.name, p.ptype, p.total, p.ok) for p in rows]
-    if others:
-        shown.append((f"Others ({len(others)})", "others", sum(p.total for p in others), sum(p.ok for p in others)))
-    shown += [(p.name, p.ptype, p.total, p.ok) for p in plain]
-    other_names = {p.name for p in others}
-    for k, (name, ptype, total, ok) in enumerate(shown):
-        if k % 2 == 0:
-            c.rect(PAD + 1, ry, W - 2 * PAD - 2, row_h, PANEL_2)
-        mid = ry + row_h / 2
-        grey = name in (ISP, NO_PROXY)
-        label = c.fit(name, 200 if k else 150, 16, "semibold")
-        c.text(PAD + 20, mid - 10, label, 16, MUTED if grey else INK, "semibold", "lm")
+    # provider rows
+    for k, (name, ptype, total, ok, names) in enumerate(shown):
+        ry = rows_top + k * ROW_H
+        mid = ry + ROW_H / 2
+        grey = ptype in (None, "isp")
         if k == 0 and not grey:
-            tx = PAD + 28 + c.width(label, 16, "semibold")
-            c.box(tx, mid - 19, 40, 18, "#173d2a", 5)
-            c.text(tx + 20, mid - 10, "TOP", 11, GREEN, "bold", "mm")
+            c.rect(PAD + 17, ry, W - 2 * PAD - 34, ROW_H, TOP_ROW)
+        c.line(PAD + 34, ry + ROW_H, W - PAD - 34, ry + ROW_H, "#2a2a2f")
+        label = c.fit(name, 230 if k == 0 and not grey else 290, 25, "semibold")
+        c.text(PAD + 34, mid - 2, label, 25, MUTED if grey else INK, "semibold", "ls")
+        if k == 0 and not grey:
+            tx = PAD + 34 + c.width(label, 25, "semibold") + 12
+            c.box(tx, mid - 23, 50, 25, "#1f4a33", 6)
+            c.text(tx + 25, mid - 10.5, "TOP", 15, GREEN, "bold", "mm")
         note = {"resi": "residential", "mobile": "mobile", "isp": "IP only, no provider name",
-                None: "no proxy field in the webhook", "others": "smaller providers"}.get(ptype, "")
-        c.text(PAD + 20, mid + 11, note, 12, MUTED, anchor="lm")
+                None: "no proxy field in the webhook", "others": f"{len(names)} smaller providers"}.get(ptype, "")
+        c.text(PAD + 34, mid + 18, note, 17, MUTED, anchor="lm")
+        biggest = max([sum(col.proxies[p] for p in names) for col in cols] + [1])
         for i, col in enumerate(cols):
-            if ptype == "others":
-                used = sum(col.proxies[p] for p in other_names)
-                good = sum(col.proxies_ok[p] for p in other_names)
-            else:
-                used, good = col.proxies[name], col.proxies_ok[name]
+            used = sum(col.proxies[p] for p in names)
             if used:
-                colour = GREEN if good == used else RED if good == 0 else AMBER
-                c.dot(left + cw * (i + 0.5), mid, min(4 + used * 1.2, min(cw * 0.42, 10)) if cw > 8 else 3, colour)
+                good = sum(col.proxies_ok[p] for p in names)
+                radius = min(5 + 8 * (used - 1) / max(biggest - 1, 1), cw * 0.4) if cw > 12 else 3
+                c.pie(left + cw * (i + 0.5), mid, radius, good, used - good)
         rate = ok / total if total else 0
-        c.text(W - PAD - 20, mid - 10, f"{round(rate * 100)}% success", 13, _rate_colour(rate), "semibold", "rm")
-        c.text(right + 14, mid - 10, f"{total}", 18, INK, "bold", "lm")
-        c.text(right + 18 + c.width(total, 18, "bold"), mid - 9, "attempt" if total == 1 else "attempts", 12, MUTED, anchor="lm")
-        c.rect(right + 14, mid + 10, W - PAD - 34 - right, 4, LINE)
-        c.rect(right + 14, mid + 10, (W - PAD - 34 - right) * rate, 4, _rate_colour(rate))
-        ry += row_h
+        sx = W - PAD - 282
+        c.text(sx, mid - 8, total, 26, INK, "bold", "ls")
+        c.text(sx + c.width(total, 26, "bold") + 8, mid - 8, "checkout" if total == 1 else "checkouts", 19, INK_2,
+               anchor="ls")
+        c.text(W - PAD - 34, mid - 8, f"{round(rate * 100)}% success", 19, _rate_colour(rate), "semibold", "rs")
+        c.split_bar(sx, mid + 6, W - PAD - 34 - sx, 8, ok, total - ok)
 
-    # time labels under the rows
-    ly = ry + 12
-    if cols:
-        step = max(1, round(90 / cw))
-        last_x = -1e9
-        for i, col in enumerate(cols):
-            new_window = i == 0 or col.window != cols[i - 1].window
-            x = left + cw * (i + 0.5)
-            if (new_window or i % step == 0) and x - last_x >= 80:
-                c.text(x, ly, _column_label(col, r.size), 12, MUTED, anchor="ma")
-                last_x = x
-    y += chart_h + 24
+    # time labels
+    ly = rows_end + 14
+    used_x: list[float] = []
+    if peak_i is not None:
+        px = left + cw * (peak_i + 0.5)
+        c.d.polygon([((px - 7) * S, (ly + 10) * S), ((px + 7) * S, (ly + 10) * S), (px * S, (ly) * S)], fill=INK_2)
+        c.text(px, ly + 30, _label(peak.start, r.size), 19, INK, "semibold", "mm")
+        used_x.append(px)
+    for i in sorted(marks):
+        x = left + cw * (i + 0.5)
+        if all(abs(x - u) >= 120 for u in used_x):
+            c.text(x, ly + 30, _label(cols[i].start, r.size), 18, MUTED, anchor="mm")
+            used_x.append(x)
 
     # --- busiest ---
+    y = 211 + 137 + 29 + chart_h + 40
     if busiest:
-        c.text(PAD, y, f"BUSIEST {size_name(r.size).upper()}S" if r.size == 1 else "BUSIEST MOMENTS", 13, MUTED, "semibold")
-        y += 30
-        bw2 = (W - 2 * PAD - 3 * 14) / 4
+        c.text(PAD, y + 12, f"BUSIEST {unit.upper()}S" if r.size in (1, 60, 1440) else "BUSIEST MOMENTS", 21, INK_2,
+               "semibold", "lm", tracking=2.4)
+        y += 50
+        gap = 24
+        bw2 = (W - 2 * PAD - 5 * gap) / 6
+        short = {ISP: "ISP", NO_PROXY: "No proxy"}
         for i, col in enumerate(busiest):
-            x = PAD + i * (bw2 + 14)
-            c.box(x, y, bw2, 116, PANEL, 12, LINE)
-            c.text(x + 16, y + 14, _column_label(col, r.size), 20, INK, "bold")
-            c.text(x + bw2 - 16, y + 12, col.total, 24, _rate_colour(col.ok / col.total), "bold", "ra")
-            c.text(x + 16, y + 44, f"{col.ok} success" + (f" · {col.failed} failed" if col.failed else ""), 13, INK_2)
-            c.rect(x + 16, y + 68, bw2 - 32, 5, PANEL_2)
-            c.rect(x + 16, y + 68, (bw2 - 32) * col.ok / col.total, 5, GREEN)
-            c.rect(x + 16 + (bw2 - 32) * col.ok / col.total, y + 68, (bw2 - 32) * col.failed / col.total, 5, RED)
-            short = {ISP: "ISP", NO_PROXY: "No proxy"}
-            used = ", ".join(f"{short.get(p, p)} ×{k}" for p, k in col.proxies.most_common())
-            c.text(x + 16, y + 84, c.fit(used, bw2 - 32, 13), 13, INK_2)
-        y += 116
-    c.text(W / 2, height - 30, "Times in the local time of the computer running the bot · only proxy provider and "
-                               "type are shown, never proxy logins", 12, MUTED, anchor="mm")
-    return c.png()
+            x = PAD + i * (bw2 + gap)
+            c.box(x, y, bw2, 175, PANEL, 16, LINE if col is peak else None)
+            c.text(x + 23, y + 36, _label(col.start, r.size), 27, INK, "bold", "lm")
+            c.text(x + bw2 - 23, y + 36, col.total, 32, _rate_colour(col.ok / col.total), "bold", "rm")
+            c.text(x + 23, y + 74, f"{col.ok} ok" + (f" · {col.failed} failed" if col.failed else ""), 18, INK_2,
+                   anchor="lm")
+            c.split_bar(x + 23, y + 96, bw2 - 46, 7, col.ok, col.failed)
+            used = ", ".join(f"{short.get(p, p)} ×{n}" for p, n in col.proxies.most_common())
+            c.text(x + 23, y + 136, c.fit(used, bw2 - 46, 20, "semibold"), 20, INK_2, "semibold", "lm")
+        y += 175
 
+    # --- footer ---
+    fy = height - 70
+    c.line(PAD, fy, W - PAD, fy, LINE)
+    gaps = " · idle gaps over 15m removed" if cols and cols[-1].window else ""
+    c.text(PAD, fy + 32, f"Times are webhook post times ({tz}, this computer's timezone) · provider names only, never "
+                         f"proxy logins{gaps}", 18, MUTED, anchor="lm")
+    return c.png()
