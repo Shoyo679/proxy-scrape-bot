@@ -24,7 +24,7 @@ def path() -> Path:
 
 def load() -> dict:
     try:
-        data = json.loads(path().read_text(encoding="utf-8"))
+        data = json.loads(path().read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         data = {}
     if os.getenv("DISCORD_TOKEN"):

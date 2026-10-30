@@ -1,8 +1,12 @@
-"""Start the bot: asks for your token the first time, then stays online while this window is open.
+"""Start the bot.
 
-  ProxyScrapeBot.exe            (or: python run.py)
-  ProxyScrapeBot.exe --reset    ask for the token again
-  ProxyScrapeBot.exe --invite   open the "add to server" page again (it opens by itself while the bot is in no server)
+On Windows the .exe (or `python run.py --tray`) is a background app with an icon by the clock (app.py). Anywhere
+else, or with `python run.py`, it runs in this console: asks for your token the first time, then stays online while
+the window is open.
+
+  python run.py                 console version
+  python run.py --reset         ask for the token again (the Windows app: tray icon > Change token)
+  python run.py --invite        open the "add to server" page again (the Windows app: tray icon > Add to server)
 """
 import sys
 
@@ -19,6 +23,9 @@ def _pause() -> None:
 
 
 def main() -> int:
+    if sys.platform == "win32" and ("--tray" in sys.argv or getattr(sys, "frozen", False)):
+        from . import app
+        return app.main()
     if sys.stdout:
         sys.stdout.reconfigure(errors="replace")
     print(f"Proxy Scrape Bot v{__version__}")

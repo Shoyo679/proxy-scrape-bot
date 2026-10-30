@@ -34,7 +34,8 @@ def open_invite(link: str) -> None:
     """Open the "add to server" page in the browser and copy the link (links in a console window are hard to use)."""
     try:
         if sys.platform == "win32":
-            subprocess.run("clip", input=link.encode("utf-16-le"), check=False)
+            subprocess.run("clip", input=link.encode("utf-16-le"), check=False,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         webbrowser.open(link)
         print("Opened the 'add to server' page in your browser (the link is also copied: Ctrl+V to paste it).")
     except Exception:
@@ -42,8 +43,9 @@ def open_invite(link: str) -> None:
 
 
 class ProxyBot(discord.Client):
-    def __init__(self, tz, invite: bool = False):
+    def __init__(self, tz, invite: bool = False, on_status=None):
         self.invite = invite   # open the "add to server" page even if the bot is already in a server
+        self.on_status = on_status or (lambda bot: None)   # the tray app shows "online in N servers"
         intents = discord.Intents.default()
         intents.message_content = True   # needed to read webhook embeds (switch it on in the Developer Portal)
         super().__init__(intents=intents)
@@ -71,11 +73,17 @@ class ProxyBot(discord.Client):
             open_invite(link)
         else:
             print("(To add it to another server later: start it with --invite, or open the link above.)")
-        print("Then type /proxy scrape in a checkout channel. Leave this window open while you use the bot.\n")
+        print("Then type /proxy scrape in a checkout channel. The bot is online while this app runs.\n")
+        self.on_status(self)
 
     async def on_guild_join(self, guild: discord.Guild):
         print(f"Added to {guild.name}")
         await self.sync_guild(guild)
+        self.on_status(self)
+
+    async def on_guild_remove(self, guild: discord.Guild):
+        print(f"Removed from {guild.name}")
+        self.on_status(self)
 
 
 def summary_embed(r: report.Report, channel_name: str, counted: str, scanned, title_day: str) -> discord.Embed:

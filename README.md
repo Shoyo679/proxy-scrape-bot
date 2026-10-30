@@ -22,15 +22,18 @@ nothing is sent anywhere except back to your Discord channel, and nothing is sav
 ## 2. Run it
 **Windows:** download `ProxyScrapeBot.exe` from [Releases](../../releases) and double-click it.
 - Windows may say "Windows protected your PC" (the app isn't code-signed): **More info** > **Run anyway**.
-- The first start asks for your **bot token** (paste it, it won't show while pasting). It's saved on your computer
-  only, in `%APPDATA%\ProxyScrapeBot\config.json`. Times on the chart use your computer's own timezone.
-- Once it says **"is online"**, it **opens the "add to server" page in your browser by itself** (and copies the
-  link: Ctrl+V to paste it somewhere). Pick your server > **Continue** > **Authorize**. You need Manage Server in
-  that server. Add it to another server later: `ProxyScrapeBot.exe --invite`.
+- The first start opens a small window asking for your **bot token** (it shows as dots). It's saved on your
+  computer only, in `%APPDATA%\ProxyScrapeBot\config.json`. Times on the chart use your computer's own timezone.
+- There's **no window to keep open**: the bot runs in the background with an icon by the clock (bottom right; click
+  the **^** arrow if you don't see it). Right-click it for: status, **Add to server**, **Start with Windows**
+  (tick it and the bot starts whenever you log in), **Change token**, **Open log**, **Quit**.
+- The bot is online while that icon is there, so while your PC is on. **Quit** takes it offline.
+- Once it's online, it **opens the "add to server" page in your browser by itself** (and copies the link: Ctrl+V
+  to paste it somewhere). Pick your server > **Continue** > **Authorize**. You need Manage Server in that server.
+  Add it to another server later: tray icon > **Add to server**.
 - **No page opened?** Developer Portal > your app > **OAuth2** > **URL Generator**: tick **bot** and
   **applications.commands**, then under Bot Permissions tick View Channels, Send Messages, Embed Links, Attach Files,
   Read Message History. Copy the **Generated URL** at the bottom and open it.
-- Keep the window open while you use the bot. Closing it takes the bot offline.
 
 **Mac / Linux (or Windows with Python 3.11+):**
 ```bash
@@ -40,8 +43,8 @@ python -m pip install -r requirements.txt
 python run.py
 ```
 
-To change the token later: `ProxyScrapeBot.exe --reset` (or `python run.py --reset`), or edit / delete
-the `config.json` above.
+To change the token later: tray icon > **Change token** (or `python run.py --reset`). To remove everything: Quit,
+untick Start with Windows first, then delete the `%APPDATA%\ProxyScrapeBot` folder.
 
 ## 3. Use it
 In the channel with your checkout webhooks, type **`/proxy scrape`**:
