@@ -25,7 +25,8 @@ nothing is sent anywhere except back to your Discord channel, and nothing is sav
 - The first start opens a small window asking for your **bot token** (it shows as dots). It's saved on your
   computer only, in `%APPDATA%\ProxyScrapeBot\config.json`. Times on the chart use your computer's own timezone.
 - There's **no window to keep open**: the bot runs in the background with an icon by the clock (bottom right; click
-  the **^** arrow if you don't see it). Right-click it for: status, **Add to server**, **Start with Windows**
+  the **^** arrow if you don't see it). Click it for **How to use** (also shown after you enter a token).
+  Right-click it for: status, **How to use**, **Add to server**, **Start with Windows**
   (tick it and the bot starts whenever you log in), **Change token**, **Open log**, **Quit**.
 - The bot is online while that icon is there, so while your PC is on. **Quit** takes it offline.
 - Once it's online, it **opens the "add to server" page in your browser by itself** (and copies the link: Ctrl+V
@@ -92,5 +93,8 @@ other bots are skipped (the summary says how many). One scrape reads at most 50,
 `psb/scan.py` (read a channel) → `psb/report.py` (numbers) → `psb/chart.py` (image, Pillow) → `psb/bot.py`
 (Discord). Proxy rules: `psb/proxies.py`; webhook formats: `psb/parse.py`. Tests: `python -m unittest discover -s tests`.
 Releases: push a tag `vX.Y.Z` and GitHub Actions builds `ProxyScrapeBot.exe` (`.github/workflows/release.yml`).
+Local build (puts `ProxyScrapeBot.exe` in this folder): `pyinstaller --onefile --noconsole --distpath . --name
+ProxyScrapeBot --icon assets/icon.ico --add-data "assets/icon.png;assets" --add-data "assets/icon.ico;assets"
+--collect-data tzdata --hidden-import tzlocal --hidden-import pystray._win32 run.py`
 
 MIT licence.

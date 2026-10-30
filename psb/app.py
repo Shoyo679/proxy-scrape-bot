@@ -94,6 +94,8 @@ class App:
         self.thread: threading.Thread | None = None
         self.status = "Starting…"
         self.announced = False
+        self.guide_next = False   # show the "How to use" page once the bot is online (after every new token)
+        self.guide_open = False
         self.icon = pystray.Icon("ProxyScrapeBot", Image.open(asset("icon.png")), NAME, self.menu())
 
     # --- main-thread helpers ---
@@ -160,8 +162,10 @@ class App:
         self.icon.update_menu()
         if not self.announced:
             self.announced = True
-            self.icon.notify("Online. Right-click this icon by the clock for options. Type /proxy scrape in Discord.",
-                             NAME)
+            self.icon.notify("Online. Click this icon by the clock for How to use, right-click for options.", NAME)
+        if self.guide_next:
+            self.guide_next = False
+            self.later(self.how_to_use)
 
     # --- problems ---
     def bad_token(self) -> None:
@@ -189,6 +193,7 @@ class App:
         return pystray.Menu(
             item(lambda _: self.status, None, enabled=False),
             pystray.Menu.SEPARATOR,
+            item("How to use", lambda: self.later(self.how_to_use), default=True),   # also a left-click on the icon
             item("Add to server", lambda: self.later(self.add_to_server)),
             item("Start with Windows", lambda: self.later(self.toggle_startup), checked=lambda _: startup_enabled()),
             item("Change token…", lambda: self.later(self.change_token)),
@@ -203,6 +208,23 @@ class App:
         else:
             messagebox.showinfo(NAME, "The bot isn't online yet, so its invite link isn't known. Try again in a moment.")
 
+    def how_to_use(self) -> None:
+        """Page 2 (welcome.ready): opened after every new token and from the tray icon."""
+        if self.guide_open:
+            return
+        self.guide_open = True
+        online = self.client is not None and self.client.user is not None and not self.client.is_closed()
+        try:
+            welcome.ready(self.root, asset("icon.png"), asset("icon.ico"),
+                          str(self.client.user) if online else None, len(self.client.guilds) if online else 0,
+                          self.add_to_server, startup_enabled(), self._set_startup)
+        finally:
+            self.guide_open = False
+
+    def _set_startup(self, on: bool) -> None:
+        set_startup(on)
+        self.icon.update_menu()
+
     def toggle_startup(self) -> None:
         set_startup(not startup_enabled())
         self.icon.update_menu()
@@ -215,6 +237,7 @@ class App:
             return
         self.data["token"] = token
         config.save(self.data)
+        self.guide_next = True
         self.stop_bot()
         self.start_bot()
 
@@ -231,6 +254,7 @@ class App:
                 return 0
             self.data["token"] = token
             config.save(self.data)
+            self.guide_next = True
         self.icon.run_detached()
         self.start_bot()
         self.root.after(150, self._poll)
