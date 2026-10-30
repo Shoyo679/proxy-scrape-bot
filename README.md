@@ -46,6 +46,18 @@ python run.py
 To change the token later: tray icon > **Change token** (or `python run.py --reset`). To remove everything: Quit,
 untick Start with Windows first, then delete the `%APPDATA%\ProxyScrapeBot` folder.
 
+## When does the bot work?
+- **While the app is running.** It runs in the background with an icon by the clock (bottom right of the taskbar;
+  click the **^** arrow if it's hidden). There's no window to keep open.
+- **Only while your PC is on.** If the PC is off or asleep, or you choose **Quit** in the icon's menu, the bot shows
+  as offline in Discord and `/proxy scrape` won't answer. Nothing is lost: webhooks stay in your channel, so you can
+  scrape them later.
+- **Start with Windows:** right-click the icon > tick **Start with Windows**, and it comes back online every time you
+  log in. Untick it to stop that.
+- **It reads the past too.** The bot doesn't need to be online when the webhooks arrive: `/proxy scrape` reads the
+  channel's history, so a drop from last night works fine as long as the bot is online when you run the command.
+- **One copy per bot.** Run the app on one PC only. Two copies with the same token would fight over the bot.
+
 ## 3. Use it
 In the channel with your checkout webhooks, type **`/proxy scrape`**:
 
