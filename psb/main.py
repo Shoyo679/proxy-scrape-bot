@@ -2,6 +2,7 @@
 
   ProxyScrapeBot.exe            (or: python run.py)
   ProxyScrapeBot.exe --reset    ask for the token and timezone again
+  ProxyScrapeBot.exe --invite   open the "add to server" page again (it opens by itself while the bot is in no server)
 """
 import sys
 
@@ -24,7 +25,7 @@ def main() -> int:
     data = config.setup(config.load(), reset_token="--reset" in sys.argv)
     while True:
         try:
-            bot.run(data["token"], config.timezone(data["timezone"]))
+            bot.run(data["token"], config.timezone(data["timezone"]), invite="--invite" in sys.argv)
             return 0
         except discord.LoginFailure:
             print("\nDiscord rejected that token. Copy a fresh one: Developer Portal > your app > Bot > Reset Token.")

@@ -17,14 +17,19 @@ nothing is sent anywhere except back to your Discord channel, and nothing is sav
    - **Reset Token** > **Copy**. Keep it secret: anyone with it can control your bot.
    - Under **Privileged Gateway Intents**, switch on **Message Content Intent** > **Save Changes**. (Without it the
      bot can't read webhook embeds.)
-3. That's it. The app prints the link to add the bot to your server on its first start.
+3. That's it. The app opens the page to add the bot to your server on its first start.
 
 ## 2. Run it
 **Windows:** download `ProxyScrapeBot.exe` from [Releases](../../releases) and double-click it.
 - Windows may say "Windows protected your PC" (the app isn't code-signed): **More info** > **Run anyway**.
 - The first start asks for your **bot token** (paste it, it won't show while pasting) and your **timezone**
   (e.g. `America/New_York`). They're saved on your computer only, in `%APPDATA%\ProxyScrapeBot\config.json`.
-- It prints **"Add it to a server: https://discord.com/oauth2/..."**: open that link, pick your server, Authorize.
+- Once it says **"is online"**, it **opens the "add to server" page in your browser by itself** (and copies the
+  link: Ctrl+V to paste it somewhere). Pick your server > **Continue** > **Authorize**. You need Manage Server in
+  that server. Add it to another server later: `ProxyScrapeBot.exe --invite`.
+- **No page opened?** Developer Portal > your app > **OAuth2** > **URL Generator**: tick **bot** and
+  **applications.commands**, then under Bot Permissions tick View Channels, Send Messages, Embed Links, Attach Files,
+  Read Message History. Copy the **Generated URL** at the bottom and open it.
 - Keep the window open while you use the bot. Closing it takes the bot offline.
 
 **Mac / Linux (or Windows with Python 3.11+):**
@@ -63,8 +68,9 @@ other bots are skipped (the summary says how many). One scrape reads at most 50,
 ## Problems
 - **"Discord rejected that token"**: copy a fresh token (Bot > Reset Token) and paste it when asked.
 - **"Turn on MESSAGE CONTENT INTENT"**: see step 1.2.
-- **`/proxy` doesn't show up**: make sure you added the bot with the link it printed (it includes the commands
-  permission), then restart the app. You need Manage Server to see it.
+- **`/proxy` doesn't show up**: make sure you added the bot with the page it opened (or the URL Generator with
+  **applications.commands** ticked), then restart the app. You need Manage Server to see it. Discord can take a
+  minute; restarting Discord (Ctrl+R) helps.
 - **"I can't read #channel"**: give the bot View Channel and Read Message History in that channel.
 
 ## For developers

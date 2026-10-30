@@ -8,6 +8,9 @@
 import asyncio
 import io
 import logging
+import subprocess
+import sys
+import webbrowser
 
 import discord
 from discord import app_commands
@@ -26,8 +29,20 @@ def invite_link(app_id: int) -> str:
             f"&permissions={PERMISSIONS}")
 
 
+def open_invite(link: str) -> None:
+    """Open the "add to server" page in the browser and copy the link (links in a console window are hard to use)."""
+    try:
+        if sys.platform == "win32":
+            subprocess.run("clip", input=link.encode("utf-16-le"), check=False)
+        webbrowser.open(link)
+        print("Opened the 'add to server' page in your browser (the link is also copied: Ctrl+V to paste it).")
+    except Exception:
+        pass
+
+
 class ProxyBot(discord.Client):
-    def __init__(self, tz):
+    def __init__(self, tz, invite: bool = False):
+        self.invite = invite   # open the "add to server" page even if the bot is already in a server
         intents = discord.Intents.default()
         intents.message_content = True   # needed to read webhook embeds (switch it on in the Developer Portal)
         super().__init__(intents=intents)
@@ -48,7 +63,12 @@ class ProxyBot(discord.Client):
         print(f"Proxy Scrape Bot v{__version__} is online as {self.user} in {len(self.guilds)} server(s).")
         for guild in self.guilds:
             await self.sync_guild(guild)
-        print(f"Add it to a server: {invite_link(self.user.id)}")
+        link = invite_link(self.user.id)
+        print(f"\nAdd it to a server with this link:\n{link}\n")
+        if self.invite or not self.guilds:
+            open_invite(link)
+        else:
+            print("(To add it to another server later: start it with --invite, or open the link above.)")
         print("Then type /proxy scrape in a checkout channel. Leave this window open while you use the bot.\n")
 
     async def on_guild_join(self, guild: discord.Guild):
@@ -185,5 +205,5 @@ def _key(point) -> int:
     return point.id or discord.utils.time_snowflake(point.when)
 
 
-def run(token: str, tz) -> None:
-    ProxyBot(tz).run(token, log_level=logging.WARNING)
+def run(token: str, tz, invite: bool = False) -> None:
+    ProxyBot(tz, invite).run(token, log_level=logging.WARNING)
