@@ -46,6 +46,14 @@ class Settings(unittest.TestCase):
         self.assertIsNotNone(datetime.now(tz).utcoffset())
 
 
+class TokenCheck(unittest.TestCase):
+    def test_looks_like_token(self):
+        from psb.welcome import looks_like_token
+        self.assertTrue(looks_like_token("M" * 26 + "." + "a" * 6 + "." + "b" * 38))
+        for bad in ("", "hello", "abc.def", "a b.c d.e f" * 10, "https://discord.com/developers/applications"):
+            self.assertFalse(looks_like_token(bad), bad)
+
+
 class Points(unittest.TestCase):
     def test_links_ids_and_dates(self):
         p = read_point("https://discord.com/channels/111/222/1300000000000000000", TZ)

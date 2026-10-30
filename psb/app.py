@@ -25,7 +25,7 @@ import discord
 import pystray
 from PIL import Image
 
-from . import bot, config
+from . import bot, config, welcome
 from .version import __version__
 
 LOCK_PORT = 47621   # held while the app runs, so a second copy can tell
@@ -110,45 +110,9 @@ class App:
         self.root.after(150, self._poll)
 
     def ask_token(self, reason: str = "") -> str | None:
-        """A small window asking for the bot token. None if closed / cancelled."""
-        win = tk.Toplevel(self.root)
-        win.title(NAME)
-        win.resizable(False, False)
-        win.attributes("-topmost", True)
-        try:
-            win.iconbitmap(str(asset("icon.ico")))
-        except tk.TclError:
-            pass
-        frame = tk.Frame(win, padx=22, pady=18)
-        frame.pack()
-        tk.Label(frame, text=reason or "Welcome! Paste your own Discord bot token to start.",
-                 font=("Segoe UI", 11, "bold"), wraplength=440, justify="left").pack(anchor="w")
-        tk.Label(frame, justify="left", wraplength=440, font=("Segoe UI", 10), text=(
-            "1. Developer Portal > New Application > Bot > Reset Token > Copy\n"
-            "2. On the same page switch on Message Content Intent > Save Changes\n"
-            "The token is saved on this computer only.")).pack(anchor="w", pady=(8, 10))
-        value = tk.StringVar()
-        entry = tk.Entry(frame, textvariable=value, show="•", width=56, font=("Segoe UI", 10))
-        entry.pack(fill="x")
-        entry.focus_set()
-        result: dict = {}
-        buttons = tk.Frame(frame, pady=12)
-        buttons.pack(fill="x")
-
-        def save(*_):
-            if value.get().strip():
-                result["token"] = value.get().strip()
-                win.destroy()
-
-        tk.Button(buttons, text="Open Developer Portal", command=lambda: webbrowser.open(PORTAL)).pack(side="left")
-        tk.Button(buttons, text="Cancel", width=10, command=win.destroy).pack(side="right")
-        tk.Button(buttons, text="Save", width=10, command=save, default="active").pack(side="right", padx=8)
-        win.bind("<Return>", save)
-        win.update_idletasks()
-        win.geometry(f"+{(win.winfo_screenwidth() - win.winfo_width()) // 2}"
-                     f"+{(win.winfo_screenheight() - win.winfo_height()) // 3}")
-        self.root.wait_window(win)
-        return result.get("token")
+        """The token window (welcome.py). None if closed / cancelled."""
+        return welcome.ask_token(self.root, asset("icon.png"), asset("icon.ico"), reason=reason,
+                                 first=not self.data.get("token"))
 
     # --- the bot ---
     def start_bot(self) -> None:
@@ -244,7 +208,7 @@ class App:
         self.icon.update_menu()
 
     def change_token(self, reason: str = "") -> None:
-        token = self.ask_token(reason or "Paste a new bot token.")
+        token = self.ask_token(reason)
         if not token:
             if not self.status.startswith("Online"):
                 self.quit()
@@ -278,6 +242,7 @@ def main() -> int:
     config.folder().mkdir(parents=True, exist_ok=True)
     sys.stdout = sys.stderr = open(log_path(), "a", encoding="utf-8", errors="replace", buffering=1)
     print(f"\n--- {NAME} v{__version__} started ---")
+    welcome.dpi_aware()
     lock = single_instance()
     if lock is None:
         root = tk.Tk()
